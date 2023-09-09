@@ -125,6 +125,30 @@ Setting `QPosXYStd = .05` and  `QVelXYStd = .2` , I get the following results:
 ---
 #### Step 4: Magnetometer Update.
 
+Snippet of the `UpdateFromMag()` implementation: 
+
+```commandline
+  ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+  zFromX(0) = ekfState(6);
+
+  // The difference between an estimated  `Yaw` and a measured `Yaw` 
+  // can be around 2Pi, when crossing the + \ - Pi values.
+  // Therefore a normalization is required.
+  float z_error(zFromX(0) - z(0));
+  if (z_error > F_PI) z_error -= 2.f * F_PI;
+  if (z_error < -F_PI) z_error += 2.f * F_PI;
+  z(0) = zFromX(0) - z_error;
+
+  hPrime(QUAD_EKF_NUM_STATES-1) = 1.0;
+  /////////////////////////////// END STUDENT CODE ////////////////////////////
+```
+
+<p align="center">
+<img src="images/10_Scenario_MagUpdate.png" width="500"/>
+</p>
 ___
+
+
+
 ## Summery 
 The controller has been implemented and all required scenarios successfully pass.
