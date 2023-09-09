@@ -186,9 +186,6 @@ kpVelZ = 10
 # Angle control gains
 kpBank = 13
 kpYaw = 2
-
-# Angle rate gains
-kpPQR = 50,50,30
 ```
 The result is pretty stable. See the gif image below:
 
@@ -196,5 +193,28 @@ The result is pretty stable. See the gif image below:
 <img src="images/11_Scenario_GPSUpdate_idealEst.gif" width="500"/>
 </p>
 
+In order to pass the scenario with `Quad.UseIdealEstimator = 1` additional round of tuning has been required.
+Ultimately, using the following configuration I succeed to pass the last scenario.
+```commandline
+# Position control gains
+kpPosXY = 2
+kpPosZ = 2
+KiPosZ = 10
+
+# Velocity control gains
+kpVelXY = 8
+kpVelZ = 10
+
+# Angle control gains
+kpBank = 12
+kpYaw = 2
+```
+
+<p align="center">
+<img src="images/11_Scenario_GPSUpdate_All_Pass.PNG" width="500"/>
+</p>
+
 ## Summery 
-The controller has been implemented and all required scenarios successfully pass.
+- All required tasks has been completed and pass the tests.
+- The controller from last project has been successfully integrated. 
+- De-tuning has been done and allows to pass the test.
