@@ -119,7 +119,7 @@ Snippet of the `Predict()` implementation:
 Setting `QPosXYStd = .05` and  `QVelXYStd = .2` , I get the following results:
 
 <p align="center">
-<img src="images/09_Scenario_PredictCovariance.png" width="500"/>
+<img src="images/09_Scenario_PredictCovariance.PNG" width="500"/>
 </p>  
 
 ---
@@ -144,7 +144,7 @@ Snippet of the `UpdateFromMag()` implementation:
 ```
 
 <p align="center">
-<img src="images/10_Scenario_MagUpdate.png" width="500"/>
+<img src="images/10_Scenario_MagUpdate.PNG" width="500"/>
 </p>
 
 ___
