@@ -180,7 +180,7 @@ VectorXf QuadEstimatorEKF::PredictState(VectorXf curState, float dt, V3F accel, 
 
   predictedState(3) += i_acc.x * dt;
   predictedState(4) += i_acc.y * dt;
-  predictedState(5) += (-i_acc.z + 9.81f) * dt;
+  predictedState(5) += (i_acc.z - 9.81f) * dt;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -296,7 +296,10 @@ void QuadEstimatorEKF::UpdateFromGPS(V3F pos, V3F vel)
   //  - The GPS measurement covariance is available in member variable R_GPS
   //  - this is a very simple update
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
+  for (int i = 0; i < 6; i++) {
+      hPrime(i, i) = 1.0;
+      zFromX(i) = ekfState(i);
+  }
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   Update(z, hPrime, R_GPS, zFromX);
@@ -318,14 +321,16 @@ void QuadEstimatorEKF::UpdateFromMag(float magYaw)
   //  - The magnetomer measurement covariance is available in member variable R_Mag
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
   zFromX(0) = ekfState(6);
-  float z_error(zFromX(0) - z(0));
 
+  // The difference between an estimated  `Yaw` and a measured `Yaw` 
+  // can be around 2Pi, when crossing the + \ - Pi values.
+  // Therefore a normalization is required.
+  float z_error(zFromX(0) - z(0));
   if (z_error > F_PI) z_error -= 2.f * F_PI;
   if (z_error < -F_PI) z_error += 2.f * F_PI;
   z(0) = zFromX(0) - z_error;
 
   hPrime(QUAD_EKF_NUM_STATES-1) = 1.0;
-
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   Update(z, hPrime, R_Mag, zFromX);

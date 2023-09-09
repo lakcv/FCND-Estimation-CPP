@@ -74,7 +74,7 @@ Below is a snippet of the `PredictState()` implementation:
 
   predictedState(3) += i_acc.x * dt;
   predictedState(4) += i_acc.y * dt;
-  predictedState(5) += (-i_acc.z + 9.81f) * dt;
+  predictedState(5) += (i_acc.z - 9.81f) * dt;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 ```
@@ -146,7 +146,30 @@ Snippet of the `UpdateFromMag()` implementation:
 <p align="center">
 <img src="images/10_Scenario_MagUpdate.png" width="500"/>
 </p>
+
 ___
+
+#### Step 5: Closed Loop + GPS Update.
+`UpdateFromGPS()` implementation  snippet :
+```commandline
+  ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+  for (int i = 0; i < 6; i++) {
+      hPrime(i, i) = 1.0;
+      zFromX(i) = ekfState(i);
+  }
+  /////////////////////////////// END STUDENT CODE ////////////////////////////
+```
+
+Setting the `QPosZStd = 0.1` and `QVelZStd = 0.5` , the above code passes the `11_GPSUpdate` scenario.  
+
+<p align="center">
+<img src="images/11_Scenario_GPSUpdate.PNG" width="500"/>
+</p>
+
+---
+
+
+
 
 
 
