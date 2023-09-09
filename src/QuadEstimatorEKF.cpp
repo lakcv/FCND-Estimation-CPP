@@ -85,17 +85,24 @@ void QuadEstimatorEKF::UpdateFromIMU(V3F accel, V3F gyro)
   //  - there are several ways to go about this, including:
   //    1) create a rotation matrix based on your current Euler angles, integrate that, convert back to Euler angles
   //    OR 
-  //    2) use the Quaternion<float> class, which has a handy FromEuler123_RPY function for creating a quaternion from Euler Roll/PitchYaw
+  //    2) use the Quaternion<float> class, which has a handy FromEuler123_RPY function for creating a quaternion from Euler Roll/Pitch/Yaw
   //       (Quaternion<float> also has a IntegrateBodyRate function, though this uses quaternions, not Euler angles)
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
   // SMALL ANGLE GYRO INTEGRATION:
   // (replace the code below)
   // make sure you comment it out when you add your own code -- otherwise e.g. you might integrate yaw twice
-
-  float predictedPitch = pitchEst + dtIMU * gyro.y;
-  float predictedRoll = rollEst + dtIMU * gyro.x;
-  ekfState(6) = ekfState(6) + dtIMU * gyro.z;	// yaw
+    
+    Quaternion<float> qt = Quaternion<float>::FromEuler123_RPY(rollEst , pitchEst, ekfState(6));
+    Quaternion<float>dq;
+    dq.IntegrateBodyRate((lastGyro + gyro)/2.0, dtIMU) ;
+    Quaternion<float> qt_bar = dq*qt;
+    float predictedPitch = qt_bar.Pitch();
+    float predictedRoll = qt_bar.Roll();
+    ekfState(6) = qt_bar.Yaw();
+  // float predictedPitch = pitchEst + dtIMU * gyro.y;
+  // float predictedRoll = rollEst + dtIMU * gyro.x;
+  // ekfState(6) = ekfState(6) + dtIMU * gyro.z;	// yaw
 
   // normalize yaw to -pi .. pi
   if (ekfState(6) > F_PI) ekfState(6) -= 2.f*F_PI;
@@ -151,6 +158,8 @@ VectorXf QuadEstimatorEKF::PredictState(VectorXf curState, float dt, V3F accel, 
   // OUTPUT:
   //   return the predicted state as a vector
 
+
+
   // HINTS 
   // - dt is the time duration for which you should predict. It will be very short (on the order of 1ms)
   //   so simplistic integration methods are fine here
@@ -162,6 +171,16 @@ VectorXf QuadEstimatorEKF::PredictState(VectorXf curState, float dt, V3F accel, 
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
+  V3F i_acc = attitude.Rotate_BtoI(accel);
+
+  predictedState(0) += predictedState(3) * dt;
+  predictedState(1) += predictedState(4) * dt;
+  predictedState(2) += predictedState(5) * dt;
+
+
+  predictedState(3) += i_acc.x * dt;
+  predictedState(4) += i_acc.y * dt;
+  predictedState(5) += (-i_acc.z + 9.81f) * dt;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -188,8 +207,17 @@ MatrixXf QuadEstimatorEKF::GetRbgPrime(float roll, float pitch, float yaw)
   //   that your calculations are reasonable
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+  RbgPrime(0, 0) = -cos(pitch) * sin(yaw);
+    RbgPrime(0, 1) = -sin(roll) * sin(pitch) * sin(yaw) - cos(roll)*cos(yaw);
+      RbgPrime(0, 2) = -cos(roll) * sin(pitch) * sin(yaw) + sin(roll) * cos(yaw);
 
+  RbgPrime(1, 0) = cos(pitch) * cos(yaw);
+    RbgPrime(1, 1) = sin(roll) * sin(pitch) * cos(yaw) - cos(roll) * sin(yaw);
+      RbgPrime(1, 2) = cos(roll) * sin(pitch) * cos(yaw) + sin(roll) * sin(yaw);
 
+  RbgPrime(2, 0) = 0;
+    RbgPrime(2, 1) = 0;
+      RbgPrime(2, 2) = 0;
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   return RbgPrime;
@@ -234,7 +262,16 @@ void QuadEstimatorEKF::Predict(float dt, V3F accel, V3F gyro)
   gPrime.setIdentity();
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+  // Complete the gPrime matrix
+  gPrime(0, 3) = gPrime(1, 4) = gPrime(2, 5) = dt;
+  gPrime(3, 6) = (RbgPrime(0, 0) * accel.x + RbgPrime(0, 1) * accel.y + RbgPrime(0, 2) * accel.z)*dt;
+  gPrime(4, 6) = (RbgPrime(1, 0) * accel.x + RbgPrime(1, 1) * accel.y + RbgPrime(1, 2) * accel.z)*dt;
+  gPrime(5, 6) = (RbgPrime(2, 0) * accel.x + RbgPrime(2, 1) * accel.y + RbgPrime(2, 2) * accel.z)*dt;
 
+  MatrixXf newEkfCov(QUAD_EKF_NUM_STATES, QUAD_EKF_NUM_STATES);
+  newEkfCov = gPrime * ekfCov * gPrime.transpose() + Q;
+
+  ekfCov = newEkfCov;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
