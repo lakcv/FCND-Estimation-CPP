@@ -12,6 +12,8 @@
 #include <systemlib/param/param.h>
 #endif
 
+V3F ClipV3F(V3F vector, float limit);
+
 void QuadControl::Init()
 {
   BaseController::Init();
@@ -45,6 +47,7 @@ void QuadControl::Init()
 
   minMotorThrust = config->Get(_config + ".minMotorThrust", 0);
   maxMotorThrust = config->Get(_config + ".maxMotorThrust", 100);
+
 #else
   // load params from PX4 parameter system
   //TODO
@@ -58,43 +61,51 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
   // Convert a desired 3-axis moment and collective thrust command to 
   //   individual motor thrust commands
   // INPUTS: 
-  //   desCollectiveThrust: desired collective thrust [N]
-  //   desMoment: desired rotation moment about each axis [N m]
+  //   collThrustCmd: desired collective thrust [N]
+  //   momentCmd: desired rotation moment about each axis [N m]
   // OUTPUT:
   //   set class member variable cmd (class variable for graphing) where
   //   cmd.desiredThrustsN[0..3]: motor commands, in [N]
 
   // HINTS: 
-  // - you can access parts of desMoment via e.g. desMoment.x
+  // - you can access parts of momentCmd via e.g. momentCmd.x
   // You'll need the arm length parameter L, and the drag/thrust ratio kappa
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+  // 
+  // Define inverce matix for 
+  //        Ftot     = +F1 +F2 +F3 +F4  
+  //        Mx/l     = +F1 -F2 +F3 -F4  
+  //        My/l     = +F1 +F2 -F3 -F4  
+  //        Mz/kappa = -F1 +F2 +F3 -F4  
+  //      
+  //       [Ftot , Mx/l , My/l , Mz/kappa]T  = R x [F1 , F2 , F3 , F4]T
+  // 
+  //       [F1 , F2 , F3 , F4]T = inv(R) x [Ftot , Mx/l , My/l , Mz/kappa]T
 
-  cmd.desiredThrustsN[0] = mass * 9.81f / 4.f; // front left
-  cmd.desiredThrustsN[1] = mass * 9.81f / 4.f; // front right
-  cmd.desiredThrustsN[2] = mass * 9.81f / 4.f; // rear left
-  cmd.desiredThrustsN[3] = mass * 9.81f / 4.f; // rear right
+    float l = L / sqrt(2); // L- length of arm from centre of quadrocopter to motor
+
+    float M[4][4] = {{ +1.0f , +1.0f , +1.0f , -1.0f }, \
+                     { +1.0f , -1.0f , +1.0f , +1.0f }, \
+                     { +1.0f , +1.0f , -1.0f , +1.0f }, \
+                     { +1.0f , -1.0f , -1.0f , -1.0f }};
+
+    float c     = collThrustCmd;
+    float p_bar = momentCmd.x / l;
+    float q_bar = momentCmd.y / l;
+    float r_bar = momentCmd.z / kappa;
+
+    float F1 = (M[0][0] * c + M[0][1] * p_bar + M[0][2] * q_bar + M[0][3] * r_bar)/4; // front left
+    float F2 = (M[1][0] * c + M[1][1] * p_bar + M[1][2] * q_bar + M[1][3] * r_bar)/4; // front right
+    float F3 = (M[2][0] * c + M[2][1] * p_bar + M[2][2] * q_bar + M[2][3] * r_bar)/4; // rear right
+    float F4 = (M[3][0] * c + M[3][1] * p_bar + M[3][2] * q_bar + M[3][3] * r_bar)/4; // rear left
+
+    cmd.desiredThrustsN[0] = F1;
+    cmd.desiredThrustsN[1] = F2;
+    cmd.desiredThrustsN[2] = F3;
+    cmd.desiredThrustsN[3] = F4;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
-  
-  /////////////////////////////// BEGIN SOLUTION //////////////////////////////
-  // Convert desired moment into differential thrusts
-  V3F diffThrust;
-
-  // for X shaped quad
-  diffThrust.x = momentCmd.x / L / 2.f / sqrtf(2);
-  diffThrust.y = momentCmd.y / L / 2.f / sqrtf(2);
-  diffThrust.z = momentCmd.z / 4.f / kappa;
-
-  // MIXING
-  // combine the collective thrust with the differential thrust commands to find desired motor thrusts
-  // X Shaped Quad (NED Frame)
-  cmd.desiredThrustsN[0] = collThrustCmd / 4.f - diffThrust.z + diffThrust.y + diffThrust.x; // front left
-  cmd.desiredThrustsN[1] = collThrustCmd / 4.f + diffThrust.z + diffThrust.y - diffThrust.x; // front right
-  cmd.desiredThrustsN[2] = collThrustCmd / 4.f + diffThrust.z - diffThrust.y + diffThrust.x; // rear left
-  cmd.desiredThrustsN[3] = collThrustCmd / 4.f - diffThrust.z - diffThrust.y - diffThrust.x; // rear right
-  
-  //////////////////////////////// END SOLUTION ///////////////////////////////
 
   return cmd;
 }
@@ -116,16 +127,11 @@ V3F QuadControl::BodyRateControl(V3F pqrCmd, V3F pqr)
   V3F momentCmd;
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
-  
+  V3F pqr_err = (pqrCmd - pqr);
+  V3F I(Ixx,Iyy,Izz);
+  momentCmd = I * kpPQR * pqr_err;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
-
-  /////////////////////////////// BEGIN SOLUTION //////////////////////////////
-  V3F rate_error = pqrCmd - pqr;
-  V3F omega_dot_des = rate_error * kpPQR;
-  momentCmd = omega_dot_des * V3F(Ixx, Iyy, Izz);
-  //////////////////////////////// END SOLUTION ///////////////////////////////
 
   return momentCmd;
 }
@@ -153,27 +159,43 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
   Mat3x3F R = attitude.RotationMatrix_IwrtB();
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+  // accelCmd -> [x_dot_dot, y_dot_dot, z_dot_dot]
+  // attitude -> [a, b, c, d] => R
+  // collThrustCmd -> c
+  float b_x_a = R(0, 2);
+  float b_y_a = R(1, 2);
 
-
-
-  /////////////////////////////// END STUDENT CODE ////////////////////////////
-
-  /////////////////////////////// BEGIN SOLUTION //////////////////////////////
-
-  
-  float target_R13 = -CONSTRAIN(accelCmd[0] / (collThrustCmd / mass), -maxTiltAngle, maxTiltAngle);
-  float target_R23 = -CONSTRAIN(accelCmd[1] / (collThrustCmd / mass), -maxTiltAngle, maxTiltAngle);
-    
-  if (collThrustCmd < 0)
-  {
-    target_R13 = 0;
-    target_R23 = 0;
+  if (sqrt(accelCmd.x * accelCmd.x + accelCmd.y * accelCmd.x)> maxAccelXY) {
+      V3F vector(accelCmd.x, accelCmd.y, 0);
+      vector = ClipV3F(vector, maxAccelXY);
+      accelCmd.x = vector.x;
+      accelCmd.y = vector.y;
   }
-  pqrCmd.x = (1 / R(2, 2))*(-R(1, 0) * kpBank*(R(0, 2) - target_R13) + R(0, 0) * kpBank*(R(1, 2) - target_R23));
-  pqrCmd.y = (1 / R(2, 2))*(-R(1, 1) * kpBank*(R(0, 2) - target_R13) + R(0, 1) * kpBank*(R(1, 2) - target_R23));
 
-  //////////////////////////////// END SOLUTION ///////////////////////////////
-  return pqrCmd;
+  float b_x_c_target = -accelCmd.x / (collThrustCmd / mass);
+  float b_y_c_target = -accelCmd.y / (collThrustCmd / mass);
+
+  b_x_c_target = CONSTRAIN(b_x_c_target, -maxTiltAngle, maxTiltAngle);
+  b_y_c_target = CONSTRAIN(b_y_c_target, -maxTiltAngle, maxTiltAngle);
+
+  float b_x_c_dot = kpBank * (b_x_c_target - b_x_a);
+  float b_y_c_dot = kpBank * (b_y_c_target - b_y_a);
+
+  float R11 = R(0, 0);
+  float R21 = R(1, 0);
+  float R12 = R(0, 1);
+  float R22 = R(1, 1);
+  float R33 = R(2, 2);
+
+  float p_c = (R21 * b_x_c_dot - R11 * b_y_c_dot) / R33;
+  float q_c = (R22 * b_x_c_dot - R12 * b_y_c_dot) / R33;
+
+  pqrCmd.x = p_c;
+  pqrCmd.y = q_c;
+  pqrCmd.z = 0;
+      /////////////////////////////// END STUDENT CODE ////////////////////////////
+
+   return pqrCmd;
 }
 
 float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, float velZ, Quaternion<float> attitude, float accelZCmd, float dt)
@@ -200,24 +222,19 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
   float thrust = 0;
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
-
-
-  /////////////////////////////// END STUDENT CODE ////////////////////////////
-
-  /////////////////////////////// BEGIN SOLUTION //////////////////////////////
-
-  velZCmd += kpPosZ * (posZCmd - posZ);
-
-  integratedAltitudeError += (posZCmd - posZ) * dt;
+  // I'll use PIDff controller
+  // thrust = c = (u1_bar - g) / b_z
+  // b_z = R33 = R(2,2)
+  // u1_bar = kpPosZ * posZ_err + kpVelZ * velZ_err + KiPosZ * integratedAltitudeError + accelZCmd
 
   velZCmd = CONSTRAIN(velZCmd, -maxAscentRate, maxDescentRate);
+  float posZ_err = posZCmd - posZ;
+  float velZ_err = velZCmd - velZ;
+  integratedAltitudeError += posZ_err * dt * dt ;
+  float u1_bar = kpVelZ * kpPosZ * posZ_err + kpVelZ * velZ_err + KiPosZ * integratedAltitudeError + accelZCmd;
+  thrust = -mass * (u1_bar - 9.81f) / R(2, 2);
 
-  float desAccel = kpVelZ * (velZCmd - velZ) + KiPosZ * integratedAltitudeError + accelZCmd - 9.81f;
-
-  thrust = -(desAccel / R(2, 2) * mass);
-
-  //////////////////////////////// END SOLUTION ///////////////////////////////
+  /////////////////////////////// END STUDENT CODE ////////////////////////////
   
   return thrust;
 }
@@ -250,29 +267,21 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
   // Make sure to _add_, not simply replace, the result of your controller
   // to this variable
   V3F accelCmd = accelCmdFF;
-
+  
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
+  V3F posError = (posCmd - pos);
+  posError.z = 0;
+
+  V3F velCmd_tot = velCmd + kpPosXY* posError;
+  velCmd = ClipV3F(velCmd_tot, maxSpeedXY);
+
+  V3F velError = (velCmd_tot - vel);
+  velError.z = 0;
   
-
+  accelCmd += kpVelXY * velError;
+  accelCmd = ClipV3F(accelCmd, maxAccelXY);
   /////////////////////////////// END STUDENT CODE ////////////////////////////
-
-  /////////////////////////////// BEGIN SOLUTION //////////////////////////////
-
-  velCmd += kpPosXY * (posCmd - pos);
-
-  if (velCmd.mag() > maxSpeedXY)
-  {
-    velCmd = velCmd * maxSpeedXY / velCmd.mag();
-  }
-
-  accelCmd += kpVelXY * (velCmd - vel);
-  if (accelCmd.mag() > maxAccelXY)
-  {
-    accelCmd = accelCmd * maxAccelXY / accelCmd.mag();
-  }
-
-  //////////////////////////////// END SOLUTION ///////////////////////////////
 
   return accelCmd;
 }
@@ -292,27 +301,19 @@ float QuadControl::YawControl(float yawCmd, float yaw)
 
   float yawRateCmd=0;
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
+  float yawErr = fmodf(yawCmd - yaw, 2.0f * (float)F_PI) ;
+  if (yawErr > (float)F_PI) {
+      yawErr -= (2.0f * (float)F_PI);
+  }
+  else if (yawErr < -(float)F_PI) {
+      yawErr += (2.0f * (float)F_PI);
+  }
+  yawRateCmd = kpYaw * yawErr;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
-  /////////////////////////////// BEGIN SOLUTION //////////////////////////////
-
-  float yawError = yawCmd - yaw;
-  yawError = fmodf(yawError, F_PI*2.f);
-  if (yawError > F_PI)
-  {
-    yawError -= 2.f * F_PI;
-  }
-  else if (yawError < -F_PI)
-  {
-    yawError += 2.f * F_PI;
-  }
-  yawRateCmd = yawError * kpYaw;
-
-  //////////////////////////////// END SOLUTION ///////////////////////////////
-  
   return yawRateCmd;
+
 }
 
 VehicleCommand QuadControl::RunControl(float dt, float simTime)
@@ -333,4 +334,15 @@ VehicleCommand QuadControl::RunControl(float dt, float simTime)
   V3F desMoment = BodyRateControl(desOmega, estOmega);
 
   return GenerateMotorCommands(collThrustCmd, desMoment);
+}
+
+// Limits V3F vector magnitude to certain value
+V3F ClipV3F(V3F vector, float limit)
+{
+    if (limit > 0) {
+        if (vector.mag() > limit) {
+            vector = vector.norm() * limit;
+        }
+    }
+    return vector;
 }

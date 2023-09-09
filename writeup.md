@@ -168,10 +168,33 @@ Setting the `QPosZStd = 0.1` and `QVelZStd = 0.5` , the above code passes the `1
 
 ---
 
+#### Step 6: Adding Your Controller.
+The replacing  the `QuadController.cpp`  and `QuadControlParams.txt` files  
+without additional tuning has been lead to a crash.   
+Reverting back the `Quad.UseIdealEstimator = 1` and touch the tuning parameters in `QuadControlParams.txt`  
 
+```commandline
+# Position control gains
+kpPosXY = 2.5
+kpPosZ = 30
+KiPosZ = 500
 
+# Velocity control gains
+kpVelXY = 5
+kpVelZ = 10
 
+# Angle control gains
+kpBank = 13
+kpYaw = 2
 
+# Angle rate gains
+kpPQR = 50,50,30
+```
+The result is pretty stable. See the gif image below:
+
+<p align="center">
+<img src="images/11_Scenario_GPSUpdate_idealEst.gif" width="500"/>
+</p>
 
 ## Summery 
 The controller has been implemented and all required scenarios successfully pass.
