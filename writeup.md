@@ -80,7 +80,7 @@ Below is a snippet of the `PredictState()` implementation:
 ```
 
 <p align="center">
-<img src="images/08_Scenario_PredictState.png" width="500"/>
+<img src="images/08_Scenario_PredictState.PNG" width="500"/>
 </p>
 
 
